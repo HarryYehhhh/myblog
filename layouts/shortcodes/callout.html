@@ -1,0 +1,16 @@
+{{- $type := .Get "type" | default "accent" -}}
+{{- $title := .Get "title" -}}
+{{- $big := .Get "big" -}}
+{{- $c := dict
+    "accent" "#58a6ff"
+    "good"   "#3fb950"
+    "warn"   "#d29922"
+    "bad"    "#f85149"
+    "neutral" "#9aa6b2" -}}
+{{- $color := index $c $type | default "#58a6ff" -}}
+<div style="border:1px solid {{ $color }}55;background:{{ $color }}14;border-left:4px solid {{ $color }};border-radius:8px;padding:1rem 1.25rem;margin:1.5rem 0;">
+  {{- with $title }}<p style="font-weight:700;color:{{ $color }};margin:0 0 .5rem 0;">{{ . }}</p>{{ end -}}
+  <div style="{{ if $big }}font-size:1.25rem;font-weight:700;line-height:1.7;{{ else }}line-height:1.8;{{ end }}">
+    {{ .Inner | markdownify }}
+  </div>
+</div>

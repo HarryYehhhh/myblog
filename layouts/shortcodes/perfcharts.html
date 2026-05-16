@@ -1,0 +1,62 @@
+<div style="display:grid;grid-template-columns:1fr;gap:1.5rem;margin:1.5rem 0;">
+  <div style="border:1px solid #30363d;border-radius:8px;padding:1rem;">
+    <p style="text-align:center;font-weight:600;margin:.25rem 0 .75rem;">RPS（越高越好）</p>
+    <canvas id="chartRps" height="220"></canvas>
+  </div>
+  <div style="border:1px solid #30363d;border-radius:8px;padding:1rem;">
+    <p style="text-align:center;font-weight:600;margin:.25rem 0 .75rem;">p99 latency（ms，越低越好）</p>
+    <canvas id="chartP99" height="220"></canvas>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  function draw() {
+    if (typeof Chart === 'undefined') { setTimeout(draw, 80); return; }
+    var scenarios = ['redirect_hot', 'redirect_cold', 'image_mixed'];
+    var series = [
+      { label: 'A. 同步 inline', color: '#9aa6b2' },
+      { label: 'B. 異步 worker', color: '#3fb950' },
+      { label: 'C. 完全移除', color: '#58a6ff' }
+    ];
+    var rps = {
+      'A. 同步 inline': [1620, 1121, 458],
+      'B. 異步 worker': [2227, 1301, 486],
+      'C. 完全移除': [2603, 1416, 458]
+    };
+    var p99 = {
+      'A. 同步 inline': [329, 202, 251],
+      'B. 異步 worker': [234, 152, 240],
+      'C. 完全移除': [190, 77, 263]
+    };
+    function mk(id, data, axis) {
+      new Chart(document.getElementById(id), {
+        type: 'bar',
+        data: {
+          labels: scenarios,
+          datasets: series.map(function (s) {
+            return { label: s.label, data: data[s.label], backgroundColor: s.color, borderRadius: 3 };
+          })
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { labels: { color: '#bbb' } },
+            tooltip: { mode: 'index', intersect: false }
+          },
+          scales: {
+            x: { grid: { color: '#30363d' }, ticks: { color: '#9aa6b2' } },
+            y: { beginAtZero: true, grid: { color: '#30363d' }, ticks: { color: '#9aa6b2' },
+                 title: { display: true, text: axis, color: '#9aa6b2' } }
+          }
+        }
+      });
+    }
+    mk('chartRps', rps, 'RPS');
+    mk('chartP99', p99, 'p99 (ms)');
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', draw);
+  } else { draw(); }
+})();
+</script>

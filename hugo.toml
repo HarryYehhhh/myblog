@@ -1,0 +1,61 @@
+baseURL = "https://harryyehhhh.github.io/myblog/"
+languageCode = "zh-Hant"
+title = "學習歷程紀錄站"
+theme = "PaperMod"
+enableInlineShortcodes = true
+enableRobotsTXT = true
+pygmentsUseClasses = true
+
+[markup]
+  [markup.goldmark.renderer]
+    unsafe = true
+  [markup.highlight]
+    noClasses = false
+    style = "github-dark"
+
+[params]
+  defaultTheme = "dark"
+  disableThemeToggle = false
+  ShowReadingTime = true
+  ShowShareButtons = false
+  ShowPostNavLinks = true
+  ShowBreadCrumbs = true
+  ShowCodeCopyButtons = true
+  ShowToc = true
+  TocOpen = false
+  description = "壓測實驗 × AI harness 工程的學習歷程紀錄"
+
+  [params.homeInfoParams]
+    Title = "我怎麼把一個壓測實驗搞砸，又怎麼修好它 👋"
+    Content = """
+用 k6 實測 URL shortener 三種 click 計數架構在高 QPS 下的承載上限——以及一個觀察者效應如何讓我的結論完全反轉。
+
+> 重點不是我做了一個 QR code 服務，是我用數據驗證架構決策時，犯了一個經典的實驗設計錯誤、發現它、修正它，結論從「拆服務沒用」翻盤成「拆服務 +37%」。
+
+下面兩篇是同一段歷程的兩個視角，互相 cross-link。
+"""
+
+  [[params.socialIcons]]
+    name = "github"
+    url = "https://github.com/HarryYehhhh"
+  [[params.socialIcons]]
+    name = "email"
+    url = "mailto:harry614099@gmail.com"
+
+[[menu.main]]
+  identifier = "about"
+  name = "關於我"
+  url = "/about/"
+  weight = 1
+
+[[menu.main]]
+  identifier = "posts"
+  name = "文章"
+  url = "/posts/"
+  weight = 2
+
+[[menu.main]]
+  identifier = "tags"
+  name = "標籤"
+  url = "/tags/"
+  weight = 3
