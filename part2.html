@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Part 2 · AI harness 心得 — 學習歷程紀錄站</title>
+<meta name="description" content="用 Claude Code 多 agent 流程開發壓測專案的踩坑與修正——以及為什麼規則要有 enforcement 點才真的存在。" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          ink: '#0d1117', panel: '#161b22', panel2: '#1c2230', line: '#30363d',
+          fg: '#e6edf3', mut: '#9aa6b2', accent: '#58a6ff', good: '#3fb950',
+          warn: '#d29922', bad: '#f85149',
+        },
+        fontFamily: { mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'] },
+      },
+    },
+  };
+</script>
+<style>
+  html { scroll-behavior: smooth; scroll-padding-top: 5rem; }
+  body { background: #0d1117; }
+  ::selection { background: #1f6feb; color: #fff; }
+  .prose-lead { line-height: 1.85; }
+  .anchor-h { scroll-margin-top: 5rem; }
+</style>
+</head>
+<body class="bg-ink text-fg font-sans antialiased">
+
+<!-- ============ NAV ============ -->
+<nav class="fixed top-0 inset-x-0 z-50 bg-ink/90 backdrop-blur border-b border-line">
+  <div class="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
+    <a href="index.html" class="font-mono text-sm text-mut hover:text-fg shrink-0">~/tech-blog</a>
+    <div class="hidden md:flex items-center gap-1 text-sm">
+      <a href="index.html#about" class="px-3 py-1.5 rounded hover:bg-panel text-fg font-medium">關於我</a>
+      <a href="part1.html" class="px-3 py-1.5 rounded hover:bg-panel text-fg font-medium">Part 1 · 壓測實驗</a>
+      <a href="part2.html" class="px-3 py-1.5 rounded bg-panel text-accent font-medium">Part 2 · AI harness</a>
+    </div>
+    <button id="menuBtn" class="md:hidden text-mut hover:text-fg text-sm font-mono px-2 py-1 border border-line rounded">選單</button>
+  </div>
+  <div id="mobileMenu" class="hidden md:hidden border-t border-line bg-panel px-4 py-3 text-sm space-y-1">
+    <a href="index.html#about" class="block py-1.5 text-fg">關於我</a>
+    <a href="part1.html" class="block py-1.5 text-fg">Part 1 · 壓測實驗</a>
+    <a href="part2.html" class="block py-1.5 text-accent">Part 2 · AI harness 心得</a>
+    <a href="#enforcement" class="block py-1.5 pl-4 text-mut">└ enforcement 點</a>
+  </div>
+</nav>
+
+<main id="top" class="pt-16">
+
+<section id="part2" class="anchor-h">
+  <div class="max-w-5xl mx-auto px-4 py-16">
+    <a href="index.html" class="text-sm text-mut hover:text-fg">← 回首頁</a>
+    <p class="font-mono text-sm text-accent mt-6">PART 2</p>
+    <h1 class="text-3xl md:text-4xl font-bold mt-2">把 AI 當一個聰明但健忘的初級工程師來管理</h1>
+    <p class="mt-5 text-lg text-mut prose-lead max-w-3xl">
+      用 Claude Code 多 agent 流程開發一個壓測專案——以及為什麼「規則寫進 prompt」幾乎沒用，要把它變成跑得起來的 test 才擋得住。
+    </p>
+    <blockquote class="mt-6 border-l-4 border-accent pl-5 text-fg/90 max-w-3xl prose-lead">
+      AI agent 會通過 lint、會說「完成了」，然後在第一次真的執行時連環爆。我學到的不是怎麼下更好的 prompt，是怎麼設計一個流程，讓 agent 的不可靠變成可被攔截的。
+    </blockquote>
+  </div>
+
+  <!-- 2. The Setup (harness) -->
+  <div id="harness-setup" class="anchor-h max-w-5xl mx-auto px-4 py-12">
+    <h2 class="text-2xl font-bold mb-3"><span class="font-mono text-mut text-base mr-2">02</span>The Setup — 我怎麼組這個 harness</h2>
+    <p class="text-mut prose-lead max-w-3xl mb-5">
+      不是「開一個對話叫 AI 寫 code」。是一條 multi-agent workflow，每個 agent 有固定職責，彼此用<strong class="text-fg">文件</strong>傳 context：
+    </p>
+    <div class="overflow-x-auto rounded-lg border border-line mb-6">
+      <table class="w-full text-sm">
+        <thead class="bg-panel2 text-left">
+          <tr>
+            <th class="px-4 py-3 font-semibold">Agent</th>
+            <th class="px-4 py-3 font-semibold">職責</th>
+            <th class="px-4 py-3 font-semibold">不准做</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-line text-mut">
+          <tr><td class="px-4 py-3 font-semibold text-accent">planner</td><td class="px-4 py-3">把模糊需求 → spec + contract（+ 必要時 ADR）</td><td class="px-4 py-3">不寫 code</td></tr>
+          <tr><td class="px-4 py-3 font-semibold text-good">generator</td><td class="px-4 py-3">嚴格照 contract 實作 + 寫測試 + 跑測試</td><td class="px-4 py-3">不重新討論需求</td></tr>
+          <tr><td class="px-4 py-3 font-semibold text-warn">evaluator</td><td class="px-4 py-3">驗收：跑測試、查 contract 每條打勾、出 QA report</td><td class="px-4 py-3">不改實作（只回報）</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="font-semibold mb-2">context 不靠對話記憶傳遞，靠檔案</p>
+    <ul class="list-disc list-inside text-mut prose-lead space-y-1 max-w-3xl mb-6">
+      <li><code class="font-mono text-fg">docs/specs/</code> — 需求規格</li>
+      <li><code class="font-mono text-fg">docs/contracts/</code> — 給 generator 的明確交付清單（evaluator 逐條驗）</li>
+      <li><code class="font-mono text-fg">docs/decisions/</code> — ADR，記錄「為什麼這樣決定」，跨 sprint 不丟失</li>
+      <li><code class="font-mono text-fg">docs/CHANGELOG.md</code> — 每個 agent 跑完自己追加一條，下一個 agent / 下一個 sprint 讀得到</li>
+    </ul>
+    <div class="rounded-lg border border-line bg-panel2 p-5 text-sm text-mut prose-lead max-w-3xl mb-6">
+      <strong class="text-fg">為什麼這樣設計：</strong>agent 的 context window 會爆、對話會被 compact、跨 sprint 記憶會斷。<strong class="text-fg">把決策外部化成檔案 = 給健忘的協作者一份不會丟的工作交接。</strong>這跟人類團隊用 ADR / spec 是同一個道理，只是對 AI 更剛性需求。
+    </div>
+    <div class="overflow-x-auto">
+      <div class="flex items-center gap-2 text-xs font-mono text-center min-w-max py-4">
+        <span class="px-3 py-2 rounded border border-line bg-panel">需求</span>
+        <span class="text-mut">→</span>
+        <span class="px-3 py-2 rounded border border-accent/40 bg-accent/10 text-accent">planner</span>
+        <span class="text-mut">→</span>
+        <span class="px-3 py-2 rounded border border-line bg-panel">contract</span>
+        <span class="text-mut">→</span>
+        <span class="px-3 py-2 rounded border border-good/40 bg-good/10 text-good">generator</span>
+        <span class="text-mut">→</span>
+        <span class="px-3 py-2 rounded border border-line bg-panel">tests</span>
+        <span class="text-mut">→</span>
+        <span class="px-3 py-2 rounded border border-warn/40 bg-warn/10 text-warn">evaluator</span>
+        <span class="text-mut">→</span>
+        <span class="px-3 py-2 rounded border border-line bg-panel">QA report</span>
+        <span class="text-mut">→</span>
+        <span class="px-3 py-2 rounded border border-line bg-panel">ship</span>
+      </div>
+      <p class="text-xs text-mut text-center">箭頭上傳遞的是<strong class="text-fg">檔案</strong>不是<strong class="text-fg">記憶</strong></p>
+    </div>
+  </div>
+
+  <!-- 3. The Save -->
+  <div id="the-save" class="anchor-h max-w-5xl mx-auto px-4 py-12">
+    <div class="rounded-xl border border-accent/40 bg-accent/[0.04] p-6 md:p-8">
+      <p class="font-mono text-sm text-accent">★ cross-link — 這是 <a href="part1.html#the-mistake" class="underline hover:text-fg">Part 1 §5</a> 同一件事的另一面</p>
+      <h2 class="text-2xl md:text-3xl font-bold mt-2 mb-4"><span class="font-mono text-mut text-base mr-2">03</span>AI 差點把錯誤結論寫進報告</h2>
+      <p class="text-fg/90 prose-lead max-w-3xl">
+        第一輪壓測數據出來，顯示「拆 worker 反而慢 8%」。AI（在我引導下跑完測試）準備把這結論寫進 perf report。
+      </p>
+      <p class="text-mut prose-lead max-w-3xl mt-3">
+        <strong class="text-fg">攔下來的不是 AI，是『這數據反直覺』的人類判斷。</strong>我要求深究，才挖出觀測性 confound（OTel 揹在被測服務上）。完整拆解見 <a href="part1.html#the-mistake" class="text-accent hover:underline font-medium">Part 1 §5「我把實驗搞砸了」</a>。
+      </p>
+      <p class="font-semibold mt-6 mb-2">教訓對 AI 協作的意義</p>
+      <ul class="list-disc list-inside text-mut prose-lead space-y-1 max-w-3xl">
+        <li>AI 很會「把手上的數據整理成漂亮結論」——這正是危險的地方，它不會自己懷疑實驗設計。</li>
+        <li><strong class="text-fg">人類在迴圈裡的價值不是寫 code，是『這不對勁』的直覺 + 要求重做的決斷。</strong></li>
+        <li>Prompt 再好都不會自動產生「先懷疑自己的測量方法」這種後設判斷，那必須是人帶進來的。</li>
+      </ul>
+      <p class="mt-5 text-sm text-mut">這就是為什麼 review 不能外包給生成它的 agent。</p>
+    </div>
+  </div>
+
+  <!-- 4. The Core Lesson: enforcement -->
+  <div id="enforcement" class="anchor-h max-w-5xl mx-auto px-4 py-12">
+    <p class="font-mono text-sm text-accent">★ Part 2 重點</p>
+    <h2 class="text-2xl md:text-3xl font-bold mt-2 mb-4"><span class="font-mono text-mut text-base mr-2">04</span>規則寫進文件沒用，要有 enforcement 點</h2>
+    <p class="text-mut prose-lead max-w-3xl mb-4">每個坑的生命週期都一樣：</p>
+    <pre class="rounded-lg border border-line bg-panel p-4 text-sm font-mono text-fg overflow-x-auto mb-8">踩坑 → 寫進 CLAUDE.md / 文件提醒 → 下次還是踩 → 變成跑得起來的 test / workflow gate → 才真的擋住</pre>
+
+    <div class="grid md:grid-cols-3 gap-5">
+      <div class="rounded-lg border border-line bg-panel p-5">
+        <p class="font-semibold text-fg mb-3">案例 A · <span class="font-mono text-sm">:latest</span> image 定時炸彈</p>
+        <p class="text-xs font-mono text-bad mb-1">坑</p>
+        <p class="text-sm text-mut prose-lead mb-3"><code class="font-mono">jaegertracing/all-in-one:latest</code> 被 Jaeger v2 淘汰，docker compose 起不來。文件早就寫「image 要 pin 版本」。</p>
+        <p class="text-xs font-mono text-warn mb-1">為什麼文件擋不住</p>
+        <p class="text-sm text-mut prose-lead mb-3">generator 寫 compose 時沒回頭讀那條，文件規則沒有執行點。</p>
+        <p class="text-xs font-mono text-good mb-1">變成什麼 enforcement</p>
+        <p class="text-sm text-mut prose-lead"><code class="font-mono">tests/test_no_latest_images.py</code> — 掃所有 compose / Dockerfile，出現 <code class="font-mono">:latest</code> 直接 test fail。規則變成 CI 會紅的東西。</p>
+      </div>
+      <div class="rounded-lg border border-line bg-panel p-5">
+        <p class="font-semibold text-fg mb-3">案例 B · shell pipeline lint pass 但跑不起來</p>
+        <p class="text-xs font-mono text-bad mb-1">坑</p>
+        <p class="text-sm text-mut prose-lead mb-3">seed.js 的 docstring 寫了一條 k6 解析 pipe，依舊印象寫「k6 console.log 寫 stdout」。k6 v0.50+ 改寫 stderr + 包成 <code class="font-mono">level=info msg="..."</code>，pipe 完全解析不到，<code class="font-mono">tokens.json</code> 是空的。syntax-only 測試抓不到。</p>
+        <p class="text-xs font-mono text-warn mb-1">為什麼文件擋不住</p>
+        <p class="text-sm text-mut prose-lead mb-3">沒有任何環節「真的執行那條 pipe 一次」。generator 只 lint，evaluator 只查 contract 打勾，CI 用 SQLite。</p>
+        <p class="text-xs font-mono text-good mb-1">變成什麼 enforcement</p>
+        <p class="text-sm text-mut prose-lead">改 generator 工作流，加一條強制步驟——<strong class="text-fg">任何 shell pipeline 必須實際 smoke run 一次</strong>（哪怕只驗「執行成功 + 輸出非空」）才能算完成。把「實跑」變成 agent 定義裡的硬性 gate，不是文件裡的軟提醒。</p>
+      </div>
+      <div class="rounded-lg border border-line bg-panel p-5">
+        <p class="font-semibold text-fg mb-3">案例 C · 最諷刺的一個</p>
+        <p class="text-xs font-mono text-bad mb-1">坑</p>
+        <p class="text-sm text-mut prose-lead mb-3">修案例 B 時，新 pipe 寫進 JSDoc 註解，sed pattern <code class="font-mono">s/.*msg=...*/\1/p</code> 裡的 <code class="font-mono">.*/</code> 被當成 JSDoc 結束符 <code class="font-mono">*/</code>，node <code class="font-mono">--check</code> 直接 SyntaxError。</p>
+        <p class="text-xs font-mono text-warn mb-1">諷刺點</p>
+        <p class="text-sm text-mut prose-lead mb-3">完美 mirror 整個主題——寫了沒跑 → lint 還沒到那行 → 真的 node --check 才爆。test 早就在跑 node --check，但 generator 寫 docstring 當下沒跑那個 test。</p>
+        <p class="text-xs font-mono text-good mb-1">變成什麼 enforcement</p>
+        <p class="text-sm text-mut prose-lead">同案例 B 的 generator workflow gate（smoke / 相關 test 必跑）+ sed 改用 <code class="font-mono">|</code> delimiter 避開 <code class="font-mono">/</code>。</p>
+      </div>
+    </div>
+
+    <div class="mt-8 rounded-xl border border-bad/30 bg-bad/[0.05] p-6 md:p-8">
+      <p class="text-xl md:text-2xl font-bold leading-relaxed">
+        「我把規則寫進 CLAUDE.md」幾乎等於沒做。規則要變成一個會讓 CI 變紅、或 agent 定義裡跑不過就不算完成的東西，才真的存在。
+      </p>
+    </div>
+  </div>
+
+  <!-- 5. Prompt Pitfalls -->
+  <div id="prompt-pitfalls" class="anchor-h max-w-5xl mx-auto px-4 py-12">
+    <h2 class="text-2xl font-bold mb-5"><span class="font-mono text-mut text-base mr-2">05</span>Prompt Pitfalls — 下 prompt 踩過的坑</h2>
+    <div class="space-y-4">
+      <div class="rounded-lg border border-line bg-panel p-5">
+        <p class="font-semibold text-fg">1 · 批次操作含 metacharacter = 自爆</p>
+        <p class="text-sm text-mut prose-lead mt-2">我叫 agent 用一行 batch sed 改 8 個檔案的 pipe。replacement 字串裡含 <code class="font-mono">|</code>，跟 sed 的 <code class="font-mono">|</code> delimiter 互吃，原片段被疊加 4 次，<strong class="text-bad">寫崩 7 個檔案</strong>。</p>
+        <p class="text-sm text-mut prose-lead mt-1">教訓：替換字串含 regex / shell metacharacter（<code class="font-mono">| ( ) / $</code>）時，永遠別用 batch sed。改用 Edit tool 的 <code class="font-mono">replace_all</code> 一檔一檔做——慢但安全。要求 agent 做批次文字替換時，明確指定工具，不要讓它自己選。</p>
+      </div>
+      <div class="rounded-lg border border-line bg-panel p-5">
+        <p class="font-semibold text-fg">2 · 「請依研究結果實作」這種 prompt 把理解外包出去</p>
+        <p class="text-sm text-mut prose-lead mt-2">把「你研究完就修 bug」丟給 agent = 它的綜合判斷會很淺。有效的 prompt 是我自己先讀懂、給出檔案路徑 + 行號 + 具體要改什麼。教訓：<strong class="text-fg">不要把『理解』delegate 出去</strong>。delegate 的是執行，不是判斷。</p>
+      </div>
+      <div class="rounded-lg border border-line bg-panel p-5">
+        <p class="font-semibold text-fg">3 · agent 說「完成了」≠ 真的能跑</p>
+        <p class="text-sm text-mut prose-lead mt-2">generator 回報 contract 全打勾、測試綠燈。第一次本地實跑連撞 3 個坑（schema 沒建 / k6 pipe / sed 自爆）。教訓：「lint 通過」「測試綠」只覆蓋受控環境。real-environment smoke 是分開的、必要的 gate。<strong class="text-fg">驗收 agent 的產出時，看實際 diff / 實際執行，不信它的總結。</strong></p>
+      </div>
+      <div class="rounded-lg border border-line bg-panel p-5">
+        <p class="font-semibold text-fg">4 · 沙箱限制造成的「合理範圍切割」會留下驗證盲區</p>
+        <p class="text-sm text-mut prose-lead mt-2">Sprint C 故意把「腳本完備」跟「實際數字」切開（subagent 無法在 sandbox 可靠跑 docker），這切割本身合理，但<strong class="text-fg">沒有任何後續環節補回『實跑驗證』</strong>，盲區就一路漏到第一次本地跑。教訓：每次因環境限制做 scope 切割，要顯式問「被切掉的那塊由誰、在哪個環節補驗」，不能讓它隱形消失。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. Takeaways Part 2 -->
+  <div id="takeaways-2" class="anchor-h max-w-5xl mx-auto px-4 py-16">
+    <h2 class="text-2xl font-bold mb-6"><span class="font-mono text-mut text-base mr-2">06</span>Takeaways</h2>
+    <div class="space-y-4">
+      <div class="rounded-xl border border-accent/30 bg-accent/[0.05] p-6">
+        <p class="text-xl md:text-2xl font-bold">1 · 把 AI 當健忘的初級工程師</p>
+        <p class="text-mut mt-1">context 用檔案傳（spec / contract / ADR / CHANGELOG），不靠對話記憶；職責用 agent 邊界切（planner / generator / evaluator），不讓一個 agent 校驗自己。</p>
+      </div>
+      <div class="rounded-xl border border-accent/30 bg-accent/[0.05] p-6">
+        <p class="text-xl md:text-2xl font-bold">2 · 規則沒有 enforcement 點就不存在</p>
+        <p class="text-mut mt-1">寫進 CLAUDE.md 的提醒會被漏讀，變成 CI 會紅的 test / agent workflow 跑不過的 gate 才真的擋住。</p>
+      </div>
+      <div class="rounded-xl border border-accent/30 bg-accent/[0.05] p-6">
+        <p class="text-xl md:text-2xl font-bold">3 · 人在迴圈裡的價值是判斷不是打字</p>
+        <p class="text-mut mt-1">AI 很會把數據整理成漂亮結論，「這不對勁、重做」這種後設判斷必須人帶進來（呼應 <a href="part1.html#the-mistake" class="text-accent hover:underline">Part 1 的 confound</a>）。</p>
+      </div>
+    </div>
+    <div class="mt-10 flex flex-wrap gap-3">
+      <a href="part1.html" class="px-5 py-2.5 rounded-lg border border-line text-fg font-semibold hover:bg-panel">← Part 1 · 壓測實驗</a>
+      <a href="index.html" class="px-5 py-2.5 rounded-lg border border-line text-fg font-semibold hover:bg-panel">回首頁</a>
+    </div>
+  </div>
+</section>
+
+<footer class="border-t border-line">
+  <div class="max-w-5xl mx-auto px-4 py-10 flex flex-wrap items-center justify-between gap-4 text-sm text-mut">
+    <p>學習歷程紀錄站 · 第一人稱誠實工程 blog</p>
+    <a href="#top" class="px-4 py-2 rounded border border-line hover:bg-panel text-fg">↑ 回頂</a>
+  </div>
+</footer>
+
+</main>
+
+<script>
+  document.getElementById('menuBtn').addEventListener('click', function () {
+    document.getElementById('mobileMenu').classList.toggle('hidden');
+  });
+</script>
+</body>
+</html>

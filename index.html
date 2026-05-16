@@ -6,26 +6,16 @@
 <title>學習歷程紀錄站 — 壓測實驗 × AI harness 工程</title>
 <meta name="description" content="用 k6 實測 URL shortener 三種 click 計數架構在高 QPS 下的承載上限，以及用 Claude Code 多 agent 流程開發它的踩坑與修正。" />
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
   tailwind.config = {
     theme: {
       extend: {
         colors: {
-          ink: '#0d1117',
-          panel: '#161b22',
-          panel2: '#1c2230',
-          line: '#30363d',
-          fg: '#e6edf3',
-          mut: '#9aa6b2',
-          accent: '#58a6ff',
-          good: '#3fb950',
-          warn: '#d29922',
-          bad: '#f85149',
+          ink: '#0d1117', panel: '#161b22', panel2: '#1c2230', line: '#30363d',
+          fg: '#e6edf3', mut: '#9aa6b2', accent: '#58a6ff', good: '#3fb950',
+          warn: '#d29922', bad: '#f85149',
         },
-        fontFamily: {
-          mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
-        },
+        fontFamily: { mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'] },
       },
     },
   };
@@ -43,19 +33,18 @@
 <!-- ============ NAV ============ -->
 <nav class="fixed top-0 inset-x-0 z-50 bg-ink/90 backdrop-blur border-b border-line">
   <div class="max-w-5xl mx-auto px-4 h-16 flex items-center justify-between gap-4">
-    <a href="#top" class="font-mono text-sm text-mut hover:text-fg shrink-0">~/tech-blog</a>
+    <a href="index.html" class="font-mono text-sm text-mut hover:text-fg shrink-0">~/tech-blog</a>
     <div class="hidden md:flex items-center gap-1 text-sm">
-      <a href="#part1" class="px-3 py-1.5 rounded hover:bg-panel text-fg font-medium">Part 1 · 壓測實驗</a>
-      <a href="#part2" class="px-3 py-1.5 rounded hover:bg-panel text-fg font-medium">Part 2 · AI harness</a>
+      <a href="#about" class="px-3 py-1.5 rounded hover:bg-panel text-fg font-medium">關於我</a>
+      <a href="part1.html" class="px-3 py-1.5 rounded hover:bg-panel text-fg font-medium">Part 1 · 壓測實驗</a>
+      <a href="part2.html" class="px-3 py-1.5 rounded hover:bg-panel text-fg font-medium">Part 2 · AI harness</a>
     </div>
     <button id="menuBtn" class="md:hidden text-mut hover:text-fg text-sm font-mono px-2 py-1 border border-line rounded">選單</button>
   </div>
   <div id="mobileMenu" class="hidden md:hidden border-t border-line bg-panel px-4 py-3 text-sm space-y-1">
-    <a href="#part1" class="block py-1.5 text-fg">Part 1 · 壓測實驗</a>
-    <a href="#the-mistake" class="block py-1.5 pl-4 text-mut">└ 我把實驗搞砸了</a>
-    <a href="#real-numbers" class="block py-1.5 pl-4 text-mut">└ 乾淨的結果</a>
-    <a href="#part2" class="block py-1.5 text-fg">Part 2 · AI harness 心得</a>
-    <a href="#enforcement" class="block py-1.5 pl-4 text-mut">└ enforcement 點</a>
+    <a href="#about" class="block py-1.5 text-fg">關於我</a>
+    <a href="part1.html" class="block py-1.5 text-fg">Part 1 · 壓測實驗</a>
+    <a href="part2.html" class="block py-1.5 text-fg">Part 2 · AI harness 心得</a>
   </div>
 </nav>
 
@@ -74,514 +63,56 @@
     重點不是我做了一個 QR code 服務，是我用數據驗證架構決策時，犯了一個經典的實驗設計錯誤、發現它、修正它，結論從「拆服務沒用」翻盤成「拆服務 +37%」。
   </blockquote>
   <div class="mt-10 flex flex-wrap gap-3">
-    <a href="#part1" class="px-5 py-2.5 rounded-lg bg-accent text-ink font-semibold hover:opacity-90">Part 1 — 壓測實驗</a>
-    <a href="#part2" class="px-5 py-2.5 rounded-lg border border-line text-fg font-semibold hover:bg-panel">Part 2 — 我怎麼用 AI agent 把它做出來</a>
+    <a href="part1.html" class="px-5 py-2.5 rounded-lg bg-accent text-ink font-semibold hover:opacity-90">Part 1 — 壓測實驗</a>
+    <a href="part2.html" class="px-5 py-2.5 rounded-lg border border-line text-fg font-semibold hover:bg-panel">Part 2 — 我怎麼用 AI agent 把它做出來</a>
   </div>
-  <p class="mt-10 text-sm text-mut max-w-3xl prose-lead">
-    這是同一個網站的兩個視角：<strong class="text-fg">Part 1</strong> 講壓測實驗本身（實驗設計錯誤的拆解），
-    <strong class="text-fg">Part 2</strong> 講我怎麼用 Claude Code 多 agent 流程把它做出來、過程中對 AI 協作的理解怎麼演進。
-  </p>
 </header>
 
 <div class="border-t border-line"></div>
 
-<!-- ====================================================== -->
-<!-- ====================  PART 1  ========================= -->
-<!-- ====================================================== -->
-<section id="part1" class="anchor-h">
+<!-- ============ ABOUT ============ -->
+<section id="about" class="anchor-h">
   <div class="max-w-5xl mx-auto px-4 py-16">
-    <p class="font-mono text-sm text-accent">PART 1</p>
-    <h2 class="text-3xl md:text-4xl font-bold mt-2">壓測實驗：高 QPS 下的 click 計數架構</h2>
-  </div>
-
-  <!-- 2. The Question -->
-  <div id="the-question" class="anchor-h max-w-5xl mx-auto px-4 py-12">
-    <h3 class="text-2xl font-bold mb-2"><span class="font-mono text-mut text-base mr-2">02</span>The Question — 專案目的</h3>
-    <p class="text-mut prose-lead max-w-3xl">我想回答一個具體問題：</p>
-    <blockquote class="my-5 border-l-4 border-accent pl-5 text-lg text-fg">
-      在高 QPS 下，redirect 路徑的 click 計數要怎麼設計，承載上限差多少？
-    </blockquote>
-    <p class="text-mut prose-lead max-w-3xl mb-4">三個候選架構，用 k6 打到飽和，看每個架構的 RPS 天花板與 p99：</p>
-    <div class="overflow-x-auto rounded-lg border border-line">
-      <table class="w-full text-sm">
-        <thead class="bg-panel2 text-left">
-          <tr>
-            <th class="px-4 py-3 font-semibold">架構</th>
-            <th class="px-4 py-3 font-semibold">redirect handler 做什麼</th>
-            <th class="px-4 py-3 font-semibold">click 計數在哪算</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-line">
-          <tr><td class="px-4 py-3 font-semibold text-accent">A. 同步 inline</td><td class="px-4 py-3">redirect 內直接 <code class="font-mono text-fg">HINCRBY</code> Redis</td><td class="px-4 py-3 text-mut">同一個 request 同步等它完成</td></tr>
-          <tr><td class="px-4 py-3 font-semibold text-good">B. 異步 worker</td><td class="px-4 py-3">redirect 只 <code class="font-mono text-fg">XADD</code> 到 Redis Stream</td><td class="px-4 py-3 text-mut">獨立 worker process 消費、聚合</td></tr>
-          <tr><td class="px-4 py-3 font-semibold text-mut">C. 完全移除</td><td class="px-4 py-3">不計數</td><td class="px-4 py-3 text-mut">不存在</td></tr>
-        </tbody>
-      </table>
+    <p class="font-mono text-sm text-accent">// 關於我</p>
+    <h2 class="text-2xl md:text-3xl font-bold mt-2">Harry</h2>
+    <p class="text-mut mt-1">軟體工程師</p>
+    <div class="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+      <a href="https://github.com/HarryYehhhh" target="_blank" rel="noopener" class="text-accent hover:underline">GitHub · github.com/HarryYehhhh</a>
+      <a href="mailto:harry614099@gmail.com" class="text-accent hover:underline">Email · harry614099@gmail.com</a>
     </div>
-  </div>
-
-  <!-- 3. The Setup -->
-  <div id="the-setup" class="anchor-h max-w-5xl mx-auto px-4 py-12">
-    <h3 class="text-2xl font-bold mb-4"><span class="font-mono text-mut text-base mr-2">03</span>The Setup — 壓測工具與方法</h3>
-    <div class="grid md:grid-cols-2 gap-5">
-      <div class="rounded-lg border border-line bg-panel p-5">
-        <p class="font-semibold mb-2">負載工具</p>
-        <p class="text-mut text-sm prose-lead"><a href="https://k6.io/" class="text-accent hover:underline" target="_blank" rel="noopener">k6</a> — 在被測服務<strong class="text-fg">外面</strong>產生流量，k6 自己量 RPS / p50 / p95 / p99 / error rate。<strong class="text-fg">這是唯一的量測來源。</strong></p>
-      </div>
-      <div class="rounded-lg border border-line bg-panel p-5">
-        <p class="font-semibold mb-2">被測服務</p>
-        <p class="text-mut text-sm prose-lead">FastAPI + Redis（URL cache + PNG cache）+ Postgres，single uvicorn process，跑在 Docker（Apple M4 Pro / 8 vCPU 配額）。</p>
-      </div>
-    </div>
-    <p class="font-semibold mt-8 mb-3">三個負載情境</p>
-    <ol class="space-y-3 text-sm text-mut prose-lead">
-      <li class="rounded-lg border border-line bg-panel p-4"><strong class="text-fg font-mono">redirect_hot</strong> — 1,000 個預建 token 隨機打 <code class="font-mono text-fg">/r/{token}</code>，全部 Redis cache hit。量 redirect 路徑吞吐天花板。負載曲線：30s warm-up → 2m @ 200 VU → 30s spike @ 500 VU → 30s ramp-down。</li>
-      <li class="rounded-lg border border-line bg-panel p-4"><strong class="text-fg font-mono">redirect_cold</strong> — 每個 iteration 先 <code class="font-mono text-fg">POST</code> 建新 token 再 redirect。量 DB 寫入路徑。constant 50 VU × 3 min。</li>
-      <li class="rounded-lg border border-line bg-panel p-4"><strong class="text-fg font-mono">image_mixed</strong> — 50% cache hit / 50% miss 打 <code class="font-mono text-fg">/v1/qr_code_image</code>。量 CPU-bound PNG 生成。100 VU × 2 min。</li>
-    </ol>
-    <div class="mt-6 rounded-lg border border-line bg-panel2 p-4 text-sm text-mut prose-lead">
-      <strong class="text-fg">公平性控制：</strong>每輪測試前 <code class="font-mono text-fg">FLUSHDB</code> + <code class="font-mono text-fg">TRUNCATE</code> + 重 seed，三個架構版本的 logging 條件一致（structlog-only，開銷 ~100µs/req，可忽略）。
-    </div>
-  </div>
-
-  <!-- 4. The Journey timeline -->
-  <div id="the-journey" class="anchor-h max-w-5xl mx-auto px-4 py-12">
-    <h3 class="text-2xl font-bold mb-6"><span class="font-mono text-mut text-base mr-2">04</span>The Journey — 架構演進時間軸</h3>
-    <ol class="relative border-l-2 border-line ml-3 space-y-7">
-      <li class="ml-6">
-        <span class="absolute -left-[9px] w-4 h-4 rounded-full bg-accent"></span>
-        <p class="font-semibold">1 · Prototype</p>
-        <p class="text-mut text-sm prose-lead">單體 FastAPI，redirect 同步 <code class="font-mono text-fg">HINCRBY</code> 計數。能跑，沒測過極限。</p>
-      </li>
-      <li class="ml-6">
-        <span class="absolute -left-[9px] w-4 h-4 rounded-full bg-accent"></span>
-        <p class="font-semibold">2 · 拆 worker</p>
-        <p class="text-mut text-sm prose-lead">把 click 計數拆成 producer（<code class="font-mono text-fg">XADD</code>）+ 獨立 consumer worker，用 Redis Streams、consumer group、<code class="font-mono text-fg">XPENDING</code>/<code class="font-mono text-fg">XCLAIM</code> crash recovery、dedupe key。</p>
-      </li>
-      <li class="ml-6">
-        <span class="absolute -left-[9px] w-4 h-4 rounded-full bg-bad"></span>
-        <div class="rounded-lg border border-bad/40 bg-bad/5 p-4">
-          <p class="font-semibold text-bad">3 · 加觀測性 &nbsp;<span class="font-mono text-xs">← 這步是錯的</span></p>
-          <p class="text-mut text-sm prose-lead mt-1">為了「能觀測微服務」加了 OpenTelemetry tracing + Prometheus metrics + Grafana 全套。<strong class="text-fg">這步污染了實驗，見下一節。</strong></p>
-        </div>
-      </li>
-      <li class="ml-6">
-        <span class="absolute -left-[9px] w-4 h-4 rounded-full bg-accent"></span>
-        <p class="font-semibold">4 · 壓測</p>
-        <p class="text-mut text-sm prose-lead">用 k6 跑三情境，量 baseline vs 各架構。</p>
-      </li>
-      <li class="ml-6">
-        <span class="absolute -left-[9px] w-4 h-4 rounded-full bg-warn"></span>
-        <p class="font-semibold text-warn">5 · 發現 confound</p>
-        <p class="text-mut text-sm prose-lead">數據說「拆 worker 反而變慢」。不對勁。深究發現是觀測性 stack 的鍋。</p>
-      </li>
-      <li class="ml-6">
-        <span class="absolute -left-[9px] w-4 h-4 rounded-full bg-accent"></span>
-        <p class="font-semibold">6 · scope 收斂</p>
-        <p class="text-mut text-sm prose-lead">移除 click counting（ADR-0003）、移除 OTel + Prometheus（ADR-0004），只留 structlog。</p>
-      </li>
-      <li class="ml-6">
-        <span class="absolute -left-[9px] w-4 h-4 rounded-full bg-good"></span>
-        <p class="font-semibold text-good">7 · 重測（乾淨版）</p>
-        <p class="text-mut text-sm prose-lead">三架構觀測性條件拉平，只變 click 架構。<strong class="text-fg">結論反轉。</strong></p>
-      </li>
-    </ol>
-  </div>
-
-  <!-- 5. The Mistake -->
-  <div id="the-mistake" class="anchor-h max-w-5xl mx-auto px-4 py-12">
-    <div class="rounded-xl border border-warn/40 bg-warn/[0.04] p-6 md:p-8">
-      <p class="font-mono text-sm text-warn">★ 全站重點</p>
-      <h3 class="text-2xl md:text-3xl font-bold mt-2 mb-4"><span class="font-mono text-mut text-base mr-2">05</span>我把實驗搞砸了</h3>
-
-      <h4 class="text-lg font-semibold text-bad mb-2">犯的錯</h4>
-      <p class="text-fg/90 prose-lead max-w-3xl">
-        為了「能觀測微服務」，我把 <strong>OpenTelemetry + Prometheus + Grafana</strong> 整套裝進<strong>被測程式本身</strong>。
-      </p>
-      <p class="text-mut prose-lead max-w-3xl mt-3">
-        這是典型的<strong class="text-fg">觀察者效應</strong>：你為了量一個東西，而你的量測手段改變了被測對象。OTel SDK 在每個 request 建 span、每個 Redis op 包 instrumentation，每 request 多 ~5–10ms。
-      </p>
-
-      <h4 class="text-lg font-semibold text-bad mt-7 mb-3">後果：結論完全錯誤</h4>
-      <p class="text-mut prose-lead max-w-3xl mb-4">第一輪對比：</p>
-      <div class="grid sm:grid-cols-2 gap-4 max-w-2xl">
-        <div class="rounded-lg border border-line bg-panel p-5">
-          <p class="text-sm text-mut">同步 inline <span class="text-xs">(無觀測)</span></p>
-          <p class="text-3xl font-bold mt-1 font-mono">2,060<span class="text-sm text-mut ml-1">hot RPS</span></p>
-        </div>
-        <div class="rounded-lg border border-bad/40 bg-bad/5 p-5">
-          <p class="text-sm text-bad">異步 worker <span class="text-xs">(揹了全套 OTel)</span></p>
-          <p class="text-3xl font-bold mt-1 font-mono text-mut line-through decoration-bad/60">1,901<span class="text-sm ml-1 no-underline">hot RPS</span></p>
-          <p class="text-xs text-bad mt-2">⚠ 被污染的錯誤數據</p>
-        </div>
-      </div>
-      <p class="text-mut prose-lead max-w-3xl mt-4">
-        數據說「拆 worker 慢了 8%」。我差點據此寫下「worker 拆分對 throughput 沒幫助」的結論。
-      </p>
-
-      <h4 class="text-lg font-semibold mt-7 mb-2">為什麼差點沒抓到</h4>
-      <p class="text-mut prose-lead max-w-3xl">兩個變因同時動了：</p>
-      <ul class="list-disc list-inside text-mut prose-lead mt-2 space-y-1">
-        <li>click 架構（同步 → 異步 worker）</li>
-        <li>觀測性 stack（無 → 全套 OTel）</li>
-      </ul>
-      <p class="text-mut prose-lead max-w-3xl mt-3">
-        異步版的架構優勢被它自己揹的 OTel overhead 蓋掉，淨效果看起來是「變慢」。<strong class="text-bad">歸因錯誤。</strong>
-      </p>
-
-      <h4 class="text-lg font-semibold text-good mt-7 mb-2">修正</h4>
-      <p class="text-mut prose-lead max-w-3xl">
-        重新設計實驗：<strong class="text-fg">觀測性固定成 structlog-only</strong>（最小、一致），只讓 click 架構這一個變因變動。
-      </p>
-
-      <h4 class="text-lg font-semibold mt-7 mb-3">關鍵教訓</h4>
-      <div class="grid md:grid-cols-3 gap-4">
-        <div class="rounded-lg border border-line bg-panel p-4">
-          <p class="font-semibold text-fg">1 · 不要 instrument 被測對象本身</p>
-          <p class="text-sm text-mut prose-lead mt-1">壓測量測應該在外部（k6 自己就會量），server 內部加 instrumentation = 改變被測物。</p>
-        </div>
-        <div class="rounded-lg border border-line bg-panel p-4">
-          <p class="font-semibold text-fg">2 · 一次只變一個變因</p>
-          <p class="text-sm text-mut prose-lead mt-1">A/B 對比的鐵律。我同時變了兩個，data 就說謊。</p>
-        </div>
-        <div class="rounded-lg border border-line bg-panel p-4">
-          <p class="font-semibold text-fg">3 · 反直覺時先懷疑實驗設計</p>
-          <p class="text-sm text-mut prose-lead mt-1">「拆 worker 變慢」反直覺，該深究而不是寫進報告。</p>
-        </div>
-      </div>
-
-      <p class="mt-7 text-sm text-mut">
-        → 從 AI 協作的角度看這同一件事：<a href="#the-save" class="text-accent hover:underline font-medium">Part 2 §3「AI 差點把錯誤結論寫進報告」</a>
-      </p>
-    </div>
-  </div>
-
-  <!-- 6. The Real Numbers -->
-  <div id="real-numbers" class="anchor-h max-w-5xl mx-auto px-4 py-12">
-    <h3 class="text-2xl font-bold mb-2"><span class="font-mono text-mut text-base mr-2">06</span>The Real Numbers — 乾淨的結果</h3>
-    <p class="text-mut prose-lead max-w-3xl mb-6">
-      觀測性拉平（全部 structlog-only）後，k6 量測，<strong class="text-fg">這是唯一有效的數據</strong>：
-    </p>
-
-    <div class="grid lg:grid-cols-2 gap-6 mb-8">
-      <div class="rounded-lg border border-line bg-panel p-5">
-        <p class="font-semibold mb-3 text-center">RPS（越高越好）</p>
-        <canvas id="chartRps" height="240"></canvas>
-      </div>
-      <div class="rounded-lg border border-line bg-panel p-5">
-        <p class="font-semibold mb-3 text-center">p99 latency（ms，越低越好）</p>
-        <canvas id="chartP99" height="240"></canvas>
-      </div>
-    </div>
-
-    <div class="overflow-x-auto rounded-lg border border-line">
-      <table class="w-full text-sm">
-        <thead class="bg-panel2 text-left">
-          <tr>
-            <th class="px-4 py-3 font-semibold">Scenario</th>
-            <th class="px-4 py-3 font-semibold">A. 同步 inline HINCRBY</th>
-            <th class="px-4 py-3 font-semibold text-good">B. 異步 Streams + worker</th>
-            <th class="px-4 py-3 font-semibold text-mut">C. 完全移除</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-line">
-          <tr><td class="px-4 py-3 font-semibold">redirect_hot RPS</td><td class="px-4 py-3 font-mono">1,620</td><td class="px-4 py-3 font-mono text-good">2,227 (+37%)</td><td class="px-4 py-3 font-mono">2,603 (+61%)</td></tr>
-          <tr><td class="px-4 py-3 text-mut">redirect_hot p50</td><td class="px-4 py-3 font-mono">77.8 ms</td><td class="px-4 py-3 font-mono">58.4 ms</td><td class="px-4 py-3 font-mono">50.9 ms</td></tr>
-          <tr><td class="px-4 py-3 text-mut">redirect_hot p95</td><td class="px-4 py-3 font-mono">279.8 ms</td><td class="px-4 py-3 font-mono">204.9 ms</td><td class="px-4 py-3 font-mono">167.1 ms</td></tr>
-          <tr><td class="px-4 py-3 font-semibold">redirect_hot p99</td><td class="px-4 py-3 font-mono">329 ms</td><td class="px-4 py-3 font-mono text-good">234 ms (−29%)</td><td class="px-4 py-3 font-mono">190 ms (−42%)</td></tr>
-          <tr><td class="px-4 py-3 font-semibold">redirect_cold RPS</td><td class="px-4 py-3 font-mono">1,121</td><td class="px-4 py-3 font-mono">1,301 (+16%)</td><td class="px-4 py-3 font-mono">1,416 (+26%)</td></tr>
-          <tr><td class="px-4 py-3 text-mut">redirect_cold p99</td><td class="px-4 py-3 font-mono">202 ms</td><td class="px-4 py-3 font-mono">152 ms</td><td class="px-4 py-3 font-mono">77 ms (−62%)</td></tr>
-          <tr><td class="px-4 py-3 font-semibold">image_mixed RPS</td><td class="px-4 py-3 font-mono">458</td><td class="px-4 py-3 font-mono">486</td><td class="px-4 py-3 font-mono">458</td></tr>
-          <tr><td class="px-4 py-3 text-mut">image_mixed p99</td><td class="px-4 py-3 font-mono">251 ms</td><td class="px-4 py-3 font-mono">240 ms</td><td class="px-4 py-3 font-mono">263 ms</td></tr>
-          <tr><td class="px-4 py-3 font-semibold">error rate（全部）</td><td class="px-4 py-3 font-mono text-good">0%</td><td class="px-4 py-3 font-mono text-good">0%</td><td class="px-4 py-3 font-mono text-good">0%</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <h4 class="text-lg font-semibold mt-8 mb-2">結論</h4>
-    <ul class="list-disc list-inside text-mut prose-lead space-y-1 max-w-3xl">
-      <li><strong class="text-good">異步 worker 拆分讓 hot path 承載 +37%（1,620 → 2,227 RPS）、p99 −29%</strong>。confound 修正後，跟第一輪「−8%」完全相反。</li>
-      <li>完全移除 click 計數再 +17%（少一個 Redis op）。</li>
-      <li><strong class="text-fg">image 三架構持平</strong>——因為瓶頸是 CPU-bound PNG 生成，與 click 架構無關。</li>
-    </ul>
-
-    <div class="mt-7 rounded-lg border border-warn/40 bg-warn/[0.05] p-5">
-      <p class="font-semibold text-warn mb-2">誠實註記 — 數據邊界的 caveat</p>
-      <p class="text-fg/90 prose-lead max-w-3xl text-sm">
-        A 的 endpoint 是 sync <code class="font-mono">def</code>（FastAPI 丟 threadpool，~40 thread 上限），B/C 是 <code class="font-mono">async def</code>（event loop）。所以 A→B 的差距包含「sync→async endpoint」+「同步→worker offload」兩個因素一起——這是這兩個架構<strong class="text-fg">實際存在時的真實樣子</strong>，是有效的真實對比，但<strong class="text-fg">不是單一變因隔離</strong>。我知道自己數據的邊界在哪。
-      </p>
-    </div>
-  </div>
-
-  <!-- 7. Where It Breaks -->
-  <div id="where-it-breaks" class="anchor-h max-w-5xl mx-auto px-4 py-12">
-    <h3 class="text-2xl font-bold mb-4"><span class="font-mono text-mut text-base mr-2">07</span>Where It Breaks — 各情境瓶頸定位</h3>
-    <div class="overflow-x-auto rounded-lg border border-line">
-      <table class="w-full text-sm">
-        <thead class="bg-panel2 text-left">
-          <tr>
-            <th class="px-4 py-3 font-semibold">情境</th>
-            <th class="px-4 py-3 font-semibold">瓶頸</th>
-            <th class="px-4 py-3 font-semibold">怎麼確認的</th>
-            <th class="px-4 py-3 font-semibold">突破方向</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-line text-mut">
-          <tr>
-            <td class="px-4 py-3 font-mono text-fg">redirect_hot</td>
-            <td class="px-4 py-3">單 process uvicorn 的 event loop</td>
-            <td class="px-4 py-3">spike 500 VU 時 throughput 不升反降（past-peak）</td>
-            <td class="px-4 py-3">多 uvicorn worker / 多 instance</td>
-          </tr>
-          <tr>
-            <td class="px-4 py-3 font-mono text-fg">redirect_cold</td>
-            <td class="px-4 py-3">SQLAlchemy connection pool（飽和在 pool_size+overflow=3）</td>
-            <td class="px-4 py-3">pool 全程滿、但 Postgres CPU 閒置（queue 在 app 層）</td>
-            <td class="px-4 py-3">調大 pool / 升 DB tier</td>
-          </tr>
-          <tr>
-            <td class="px-4 py-3 font-mono text-fg">image_mixed</td>
-            <td class="px-4 py-3">CPU-bound <code class="font-mono">qrcode</code> PNG 生成（~10–20ms/req）</td>
-            <td class="px-4 py-3">api container CPU 接近 100%、與 click 架構無關</td>
-            <td class="px-4 py-3">預生成常見 spec / Rust QR lib / offload thread pool</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- 8. Scaling Reality -->
-  <div id="scaling" class="anchor-h max-w-5xl mx-auto px-4 py-12">
-    <h3 class="text-2xl font-bold mb-3"><span class="font-mono text-mut text-base mr-2">08</span>Scaling Reality — 要 50,000 RPS 怎麼辦</h3>
-    <p class="text-mut prose-lead max-w-3xl mb-4">單機天花板 ~2,000 RPS。要 50k：</p>
-    <ul class="list-disc list-inside text-mut prose-lead space-y-2 max-w-3xl">
-      <li>不是單機調參能解決——是 <strong class="text-fg">CDN offload + 水平擴展</strong>問題。</li>
-      <li>95%+ 的 redirect 是 cache-hot 固定 URL → 放 Cloud CDN，origin 只處理 cache miss。</li>
-      <li>Cloud Run autoscaling 拉 instance、Memorystore 升 Cluster、Postgres 升 tier。</li>
-    </ul>
-    <p class="mt-4 text-fg prose-lead max-w-3xl"><strong>結論：50k RPS 是架構問題不是 tuning 問題。</strong></p>
-  </div>
-
-  <!-- 9. ADRs -->
-  <div id="adrs" class="anchor-h max-w-5xl mx-auto px-4 py-12">
-    <h3 class="text-2xl font-bold mb-4"><span class="font-mono text-mut text-base mr-2">09</span>Decisions / ADRs — 工程判斷紀錄</h3>
-    <p class="text-mut prose-lead max-w-3xl mb-5">每個「加入」與「移除」都有 ADR。主軸：<strong class="text-fg">knows when NOT to add complexity</strong>——展現的是減法的成熟度，不是加法的能力。</p>
-    <div class="space-y-4">
-      <div class="rounded-lg border border-line bg-panel p-5">
-        <p class="font-mono text-accent text-sm">ADR-0001</p>
-        <p class="text-fg prose-lead mt-1">選 Redis Streams（而非 Pub/Sub / Kafka）做 click pipeline——已有 Redis、consumer group 夠用。</p>
-      </div>
-      <div class="rounded-lg border border-line bg-panel p-5">
-        <p class="font-mono text-accent text-sm">ADR-0003</p>
-        <p class="text-fg prose-lead mt-1">移除 click counting——對 redirect MVP 是 pure cost。背後是一個<strong>讀寫職責分離（CQRS-style tiering）</strong>的設計判斷：redirect 是讀密集路徑（Redis cache + Postgres），click/analytics 是寫密集路徑，兩者不該共用同一個 store；分析資料應該導向獨立 analytics tier（如 BigQuery）讓 redirect tier 不被寫入污染。</p>
-        <div class="mt-3 rounded-md border border-warn/40 bg-warn/[0.06] p-3 text-sm text-warn">
-          ⚠ 重要標注：這個 analytics tier 只是<strong>架構決策，未實作、未壓測</strong>。本實驗測的是 click 計數機制本身（同步 / 異步 worker / 移除）的承載差異，<strong>不是讀寫職責分離拓樸的效能</strong>。
-        </div>
-      </div>
-      <div class="rounded-lg border border-line bg-panel p-5">
-        <p class="font-mono text-accent text-sm">ADR-0004</p>
-        <p class="text-fg prose-lead mt-1">移除 OTel + Prometheus，保留 structlog——量出 ~5–10% overhead 對 single-process 不值得，Cloud Run console 已 cover。</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- 10. Takeaways Part 1 -->
-  <div id="takeaways-1" class="anchor-h max-w-5xl mx-auto px-4 py-16">
-    <h3 class="text-2xl font-bold mb-6"><span class="font-mono text-mut text-base mr-2">10</span>Takeaways</h3>
-    <div class="space-y-4">
-      <div class="rounded-xl border border-accent/30 bg-accent/[0.05] p-6">
-        <p class="text-xl md:text-2xl font-bold">1 · 壓測量測要在被測對象外部</p>
-        <p class="text-mut mt-1">instrument 被測物 = 觀察者效應。</p>
-      </div>
-      <div class="rounded-xl border border-accent/30 bg-accent/[0.05] p-6">
-        <p class="text-xl md:text-2xl font-bold">2 · 一次只變一個變因</p>
-        <p class="text-mut mt-1">否則歸因錯誤，數據會說謊。</p>
-      </div>
-      <div class="rounded-xl border border-accent/30 bg-accent/[0.05] p-6">
-        <p class="text-xl md:text-2xl font-bold">3 · 減法是工程成熟度</p>
-        <p class="text-mut mt-1">我移除的東西（click pipeline、OTel stack）跟我加的一樣重要，而且都有 ADR 紀錄理由。</p>
-      </div>
+    <div class="mt-7 space-y-4 max-w-3xl text-mut prose-lead">
+      <p>我做後端與系統，習慣用數據驗證架構決策，也接受數據反過來打臉自己。這個站不是作品集，是兩段學習歷程的誠實紀錄：一次我把壓測實驗搞砸又修好的過程，一次我怎麼把不可靠的 AI agent 流程設計成擋得住錯誤的 harness。</p>
+      <p>一句話講我的工程偏好：<strong class="text-fg">知道什麼時候不要加東西</strong>。我移除的（click pipeline、整套 OTel）跟我加的一樣有理由，而且都寫成 ADR。比起「我做了什麼」，我更在意「我怎麼知道它是對的、它的邊界在哪」。</p>
     </div>
   </div>
 </section>
 
 <div class="border-t border-line"></div>
 
-<!-- ====================================================== -->
-<!-- ====================  PART 2  ========================= -->
-<!-- ====================================================== -->
-<section id="part2" class="anchor-h">
-  <div class="max-w-5xl mx-auto px-4 py-16">
-    <p class="font-mono text-sm text-accent">PART 2</p>
-    <h2 class="text-3xl md:text-4xl font-bold mt-2">把 AI 當一個聰明但健忘的初級工程師來管理</h2>
-    <p class="mt-5 text-lg text-mut prose-lead max-w-3xl">
-      用 Claude Code 多 agent 流程開發一個壓測專案——以及為什麼「規則寫進 prompt」幾乎沒用，要把它變成跑得起來的 test 才擋得住。
-    </p>
-    <blockquote class="mt-6 border-l-4 border-accent pl-5 text-fg/90 max-w-3xl prose-lead">
-      AI agent 會通過 lint、會說「完成了」，然後在第一次真的執行時連環爆。我學到的不是怎麼下更好的 prompt，是怎麼設計一個流程，讓 agent 的不可靠變成可被攔截的。
-    </blockquote>
-  </div>
-
-  <!-- 2. The Setup (harness) -->
-  <div id="harness-setup" class="anchor-h max-w-5xl mx-auto px-4 py-12">
-    <h3 class="text-2xl font-bold mb-3"><span class="font-mono text-mut text-base mr-2">02</span>The Setup — 我怎麼組這個 harness</h3>
-    <p class="text-mut prose-lead max-w-3xl mb-5">
-      不是「開一個對話叫 AI 寫 code」。是一條 multi-agent workflow，每個 agent 有固定職責，彼此用<strong class="text-fg">文件</strong>傳 context：
-    </p>
-    <div class="overflow-x-auto rounded-lg border border-line mb-6">
-      <table class="w-full text-sm">
-        <thead class="bg-panel2 text-left">
-          <tr>
-            <th class="px-4 py-3 font-semibold">Agent</th>
-            <th class="px-4 py-3 font-semibold">職責</th>
-            <th class="px-4 py-3 font-semibold">不准做</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-line text-mut">
-          <tr><td class="px-4 py-3 font-semibold text-accent">planner</td><td class="px-4 py-3">把模糊需求 → spec + contract（+ 必要時 ADR）</td><td class="px-4 py-3">不寫 code</td></tr>
-          <tr><td class="px-4 py-3 font-semibold text-good">generator</td><td class="px-4 py-3">嚴格照 contract 實作 + 寫測試 + 跑測試</td><td class="px-4 py-3">不重新討論需求</td></tr>
-          <tr><td class="px-4 py-3 font-semibold text-warn">evaluator</td><td class="px-4 py-3">驗收：跑測試、查 contract 每條打勾、出 QA report</td><td class="px-4 py-3">不改實作（只回報）</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="font-semibold mb-2">context 不靠對話記憶傳遞，靠檔案</p>
-    <ul class="list-disc list-inside text-mut prose-lead space-y-1 max-w-3xl mb-6">
-      <li><code class="font-mono text-fg">docs/specs/</code> — 需求規格</li>
-      <li><code class="font-mono text-fg">docs/contracts/</code> — 給 generator 的明確交付清單（evaluator 逐條驗）</li>
-      <li><code class="font-mono text-fg">docs/decisions/</code> — ADR，記錄「為什麼這樣決定」，跨 sprint 不丟失</li>
-      <li><code class="font-mono text-fg">docs/CHANGELOG.md</code> — 每個 agent 跑完自己追加一條，下一個 agent / 下一個 sprint 讀得到</li>
-    </ul>
-    <div class="rounded-lg border border-line bg-panel2 p-5 text-sm text-mut prose-lead max-w-3xl mb-6">
-      <strong class="text-fg">為什麼這樣設計：</strong>agent 的 context window 會爆、對話會被 compact、跨 sprint 記憶會斷。<strong class="text-fg">把決策外部化成檔案 = 給健忘的協作者一份不會丟的工作交接。</strong>這跟人類團隊用 ADR / spec 是同一個道理，只是對 AI 更剛性需求。
-    </div>
-    <div class="overflow-x-auto">
-      <div class="flex items-center gap-2 text-xs font-mono text-center min-w-max py-4">
-        <span class="px-3 py-2 rounded border border-line bg-panel">需求</span>
-        <span class="text-mut">→</span>
-        <span class="px-3 py-2 rounded border border-accent/40 bg-accent/10 text-accent">planner</span>
-        <span class="text-mut">→</span>
-        <span class="px-3 py-2 rounded border border-line bg-panel">contract</span>
-        <span class="text-mut">→</span>
-        <span class="px-3 py-2 rounded border border-good/40 bg-good/10 text-good">generator</span>
-        <span class="text-mut">→</span>
-        <span class="px-3 py-2 rounded border border-line bg-panel">tests</span>
-        <span class="text-mut">→</span>
-        <span class="px-3 py-2 rounded border border-warn/40 bg-warn/10 text-warn">evaluator</span>
-        <span class="text-mut">→</span>
-        <span class="px-3 py-2 rounded border border-line bg-panel">QA report</span>
-        <span class="text-mut">→</span>
-        <span class="px-3 py-2 rounded border border-line bg-panel">ship</span>
-      </div>
-      <p class="text-xs text-mut text-center">箭頭上傳遞的是<strong class="text-fg">檔案</strong>不是<strong class="text-fg">記憶</strong></p>
-    </div>
-  </div>
-
-  <!-- 3. The Save -->
-  <div id="the-save" class="anchor-h max-w-5xl mx-auto px-4 py-12">
-    <div class="rounded-xl border border-accent/40 bg-accent/[0.04] p-6 md:p-8">
-      <p class="font-mono text-sm text-accent">★ cross-link — 這是 <a href="#the-mistake" class="underline hover:text-fg">Part 1 §5</a> 同一件事的另一面</p>
-      <h3 class="text-2xl md:text-3xl font-bold mt-2 mb-4"><span class="font-mono text-mut text-base mr-2">03</span>AI 差點把錯誤結論寫進報告</h3>
-      <p class="text-fg/90 prose-lead max-w-3xl">
-        第一輪壓測數據出來，顯示「拆 worker 反而慢 8%」。AI（在我引導下跑完測試）準備把這結論寫進 perf report。
+<!-- ============ TWO PARTS ============ -->
+<section class="max-w-5xl mx-auto px-4 py-16">
+  <p class="font-mono text-sm text-accent">// 兩篇文章</p>
+  <p class="mt-3 text-mut prose-lead max-w-3xl">
+    這是同一段歷程的兩個視角：<strong class="text-fg">Part 1</strong> 講壓測實驗本身（實驗設計錯誤的拆解），
+    <strong class="text-fg">Part 2</strong> 講我怎麼用 Claude Code 多 agent 流程把它做出來、過程中對 AI 協作的理解怎麼演進。兩篇互相 cross-link。
+  </p>
+  <div class="mt-8 grid md:grid-cols-2 gap-6">
+    <a href="part1.html" class="group rounded-xl border border-line bg-panel p-6 hover:border-accent transition">
+      <p class="font-mono text-sm text-accent">PART 1</p>
+      <h3 class="text-xl md:text-2xl font-bold mt-2 group-hover:text-accent">壓測實驗：高 QPS 下的 click 計數架構</h3>
+      <p class="text-mut prose-lead mt-3 text-sm">
+        三種 click 計數架構（同步 inline / 異步 worker / 完全移除）的 k6 壓測比較。核心是一個觀察者效應 confound 如何讓結論從「−8%」反轉成「+37%」，以及我怎麼發現並修正它。
       </p>
-      <p class="text-mut prose-lead max-w-3xl mt-3">
-        <strong class="text-fg">攔下來的不是 AI，是『這數據反直覺』的人類判斷。</strong>我要求深究，才挖出觀測性 confound（OTel 揹在被測服務上）。完整拆解見 <a href="#the-mistake" class="text-accent hover:underline font-medium">Part 1 §5「我把實驗搞砸了」</a>。
+      <p class="mt-4 text-sm text-accent font-medium">讀 Part 1 →</p>
+    </a>
+    <a href="part2.html" class="group rounded-xl border border-line bg-panel p-6 hover:border-accent transition">
+      <p class="font-mono text-sm text-accent">PART 2</p>
+      <h3 class="text-xl md:text-2xl font-bold mt-2 group-hover:text-accent">把 AI 當聰明但健忘的初級工程師來管理</h3>
+      <p class="text-mut prose-lead mt-3 text-sm">
+        用 Claude Code 多 agent 流程開發這個專案的踩坑。核心是「規則寫進文件沒用，要有 enforcement 點」——踩坑怎麼變成擋得住的 test / workflow gate。
       </p>
-      <p class="font-semibold mt-6 mb-2">教訓對 AI 協作的意義</p>
-      <ul class="list-disc list-inside text-mut prose-lead space-y-1 max-w-3xl">
-        <li>AI 很會「把手上的數據整理成漂亮結論」——這正是危險的地方，它不會自己懷疑實驗設計。</li>
-        <li><strong class="text-fg">人類在迴圈裡的價值不是寫 code，是『這不對勁』的直覺 + 要求重做的決斷。</strong></li>
-        <li>Prompt 再好都不會自動產生「先懷疑自己的測量方法」這種後設判斷，那必須是人帶進來的。</li>
-      </ul>
-      <p class="mt-5 text-sm text-mut">這就是為什麼 review 不能外包給生成它的 agent。</p>
-    </div>
-  </div>
-
-  <!-- 4. The Core Lesson: enforcement -->
-  <div id="enforcement" class="anchor-h max-w-5xl mx-auto px-4 py-12">
-    <p class="font-mono text-sm text-accent">★ Part 2 重點</p>
-    <h3 class="text-2xl md:text-3xl font-bold mt-2 mb-4"><span class="font-mono text-mut text-base mr-2">04</span>規則寫進文件沒用，要有 enforcement 點</h3>
-    <p class="text-mut prose-lead max-w-3xl mb-4">每個坑的生命週期都一樣：</p>
-    <pre class="rounded-lg border border-line bg-panel p-4 text-sm font-mono text-fg overflow-x-auto mb-8">踩坑 → 寫進 CLAUDE.md / 文件提醒 → 下次還是踩 → 變成跑得起來的 test / workflow gate → 才真的擋住</pre>
-
-    <div class="grid md:grid-cols-3 gap-5">
-      <div class="rounded-lg border border-line bg-panel p-5">
-        <p class="font-semibold text-fg mb-3">案例 A · <span class="font-mono text-sm">:latest</span> image 定時炸彈</p>
-        <p class="text-xs font-mono text-bad mb-1">坑</p>
-        <p class="text-sm text-mut prose-lead mb-3"><code class="font-mono">jaegertracing/all-in-one:latest</code> 被 Jaeger v2 淘汰，docker compose 起不來。文件早就寫「image 要 pin 版本」。</p>
-        <p class="text-xs font-mono text-warn mb-1">為什麼文件擋不住</p>
-        <p class="text-sm text-mut prose-lead mb-3">generator 寫 compose 時沒回頭讀那條，文件規則沒有執行點。</p>
-        <p class="text-xs font-mono text-good mb-1">變成什麼 enforcement</p>
-        <p class="text-sm text-mut prose-lead"><code class="font-mono">tests/test_no_latest_images.py</code> — 掃所有 compose / Dockerfile，出現 <code class="font-mono">:latest</code> 直接 test fail。規則變成 CI 會紅的東西。</p>
-      </div>
-      <div class="rounded-lg border border-line bg-panel p-5">
-        <p class="font-semibold text-fg mb-3">案例 B · shell pipeline lint pass 但跑不起來</p>
-        <p class="text-xs font-mono text-bad mb-1">坑</p>
-        <p class="text-sm text-mut prose-lead mb-3">seed.js 的 docstring 寫了一條 k6 解析 pipe，依舊印象寫「k6 console.log 寫 stdout」。k6 v0.50+ 改寫 stderr + 包成 <code class="font-mono">level=info msg="..."</code>，pipe 完全解析不到，<code class="font-mono">tokens.json</code> 是空的。syntax-only 測試抓不到。</p>
-        <p class="text-xs font-mono text-warn mb-1">為什麼文件擋不住</p>
-        <p class="text-sm text-mut prose-lead mb-3">沒有任何環節「真的執行那條 pipe 一次」。generator 只 lint，evaluator 只查 contract 打勾，CI 用 SQLite。</p>
-        <p class="text-xs font-mono text-good mb-1">變成什麼 enforcement</p>
-        <p class="text-sm text-mut prose-lead">改 generator 工作流，加一條強制步驟——<strong class="text-fg">任何 shell pipeline 必須實際 smoke run 一次</strong>（哪怕只驗「執行成功 + 輸出非空」）才能算完成。把「實跑」變成 agent 定義裡的硬性 gate，不是文件裡的軟提醒。</p>
-      </div>
-      <div class="rounded-lg border border-line bg-panel p-5">
-        <p class="font-semibold text-fg mb-3">案例 C · 最諷刺的一個</p>
-        <p class="text-xs font-mono text-bad mb-1">坑</p>
-        <p class="text-sm text-mut prose-lead mb-3">修案例 B 時，新 pipe 寫進 JSDoc 註解，sed pattern <code class="font-mono">s/.*msg=...*/\1/p</code> 裡的 <code class="font-mono">.*/</code> 被當成 JSDoc 結束符 <code class="font-mono">*/</code>，node <code class="font-mono">--check</code> 直接 SyntaxError。</p>
-        <p class="text-xs font-mono text-warn mb-1">諷刺點</p>
-        <p class="text-sm text-mut prose-lead mb-3">完美 mirror 整個主題——寫了沒跑 → lint 還沒到那行 → 真的 node --check 才爆。test 早就在跑 node --check，但 generator 寫 docstring 當下沒跑那個 test。</p>
-        <p class="text-xs font-mono text-good mb-1">變成什麼 enforcement</p>
-        <p class="text-sm text-mut prose-lead">同案例 B 的 generator workflow gate（smoke / 相關 test 必跑）+ sed 改用 <code class="font-mono">|</code> delimiter 避開 <code class="font-mono">/</code>。</p>
-      </div>
-    </div>
-
-    <div class="mt-8 rounded-xl border border-bad/30 bg-bad/[0.05] p-6 md:p-8">
-      <p class="text-xl md:text-2xl font-bold leading-relaxed">
-        「我把規則寫進 CLAUDE.md」幾乎等於沒做。規則要變成一個會讓 CI 變紅、或 agent 定義裡跑不過就不算完成的東西，才真的存在。
-      </p>
-    </div>
-  </div>
-
-  <!-- 5. Prompt Pitfalls -->
-  <div id="prompt-pitfalls" class="anchor-h max-w-5xl mx-auto px-4 py-12">
-    <h3 class="text-2xl font-bold mb-5"><span class="font-mono text-mut text-base mr-2">05</span>Prompt Pitfalls — 下 prompt 踩過的坑</h3>
-    <div class="space-y-4">
-      <div class="rounded-lg border border-line bg-panel p-5">
-        <p class="font-semibold text-fg">1 · 批次操作含 metacharacter = 自爆</p>
-        <p class="text-sm text-mut prose-lead mt-2">我叫 agent 用一行 batch sed 改 8 個檔案的 pipe。replacement 字串裡含 <code class="font-mono">|</code>，跟 sed 的 <code class="font-mono">|</code> delimiter 互吃，原片段被疊加 4 次，<strong class="text-bad">寫崩 7 個檔案</strong>。</p>
-        <p class="text-sm text-mut prose-lead mt-1">教訓：替換字串含 regex / shell metacharacter（<code class="font-mono">| ( ) / $</code>）時，永遠別用 batch sed。改用 Edit tool 的 <code class="font-mono">replace_all</code> 一檔一檔做——慢但安全。要求 agent 做批次文字替換時，明確指定工具，不要讓它自己選。</p>
-      </div>
-      <div class="rounded-lg border border-line bg-panel p-5">
-        <p class="font-semibold text-fg">2 · 「請依研究結果實作」這種 prompt 把理解外包出去</p>
-        <p class="text-sm text-mut prose-lead mt-2">把「你研究完就修 bug」丟給 agent = 它的綜合判斷會很淺。有效的 prompt 是我自己先讀懂、給出檔案路徑 + 行號 + 具體要改什麼。教訓：<strong class="text-fg">不要把『理解』delegate 出去</strong>。delegate 的是執行，不是判斷。</p>
-      </div>
-      <div class="rounded-lg border border-line bg-panel p-5">
-        <p class="font-semibold text-fg">3 · agent 說「完成了」≠ 真的能跑</p>
-        <p class="text-sm text-mut prose-lead mt-2">generator 回報 contract 全打勾、測試綠燈。第一次本地實跑連撞 3 個坑（schema 沒建 / k6 pipe / sed 自爆）。教訓：「lint 通過」「測試綠」只覆蓋受控環境。real-environment smoke 是分開的、必要的 gate。<strong class="text-fg">驗收 agent 的產出時，看實際 diff / 實際執行，不信它的總結。</strong></p>
-      </div>
-      <div class="rounded-lg border border-line bg-panel p-5">
-        <p class="font-semibold text-fg">4 · 沙箱限制造成的「合理範圍切割」會留下驗證盲區</p>
-        <p class="text-sm text-mut prose-lead mt-2">Sprint C 故意把「腳本完備」跟「實際數字」切開（subagent 無法在 sandbox 可靠跑 docker），這切割本身合理，但<strong class="text-fg">沒有任何後續環節補回『實跑驗證』</strong>，盲區就一路漏到第一次本地跑。教訓：每次因環境限制做 scope 切割，要顯式問「被切掉的那塊由誰、在哪個環節補驗」，不能讓它隱形消失。</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- 6. Takeaways Part 2 -->
-  <div id="takeaways-2" class="anchor-h max-w-5xl mx-auto px-4 py-16">
-    <h3 class="text-2xl font-bold mb-6"><span class="font-mono text-mut text-base mr-2">06</span>Takeaways</h3>
-    <div class="space-y-4">
-      <div class="rounded-xl border border-accent/30 bg-accent/[0.05] p-6">
-        <p class="text-xl md:text-2xl font-bold">1 · 把 AI 當健忘的初級工程師</p>
-        <p class="text-mut mt-1">context 用檔案傳（spec / contract / ADR / CHANGELOG），不靠對話記憶；職責用 agent 邊界切（planner / generator / evaluator），不讓一個 agent 校驗自己。</p>
-      </div>
-      <div class="rounded-xl border border-accent/30 bg-accent/[0.05] p-6">
-        <p class="text-xl md:text-2xl font-bold">2 · 規則沒有 enforcement 點就不存在</p>
-        <p class="text-mut mt-1">寫進 CLAUDE.md 的提醒會被漏讀，變成 CI 會紅的 test / agent workflow 跑不過的 gate 才真的擋住。</p>
-      </div>
-      <div class="rounded-xl border border-accent/30 bg-accent/[0.05] p-6">
-        <p class="text-xl md:text-2xl font-bold">3 · 人在迴圈裡的價值是判斷不是打字</p>
-        <p class="text-mut mt-1">AI 很會把數據整理成漂亮結論，「這不對勁、重做」這種後設判斷必須人帶進來（呼應 <a href="#the-mistake" class="text-accent hover:underline">Part 1 的 confound</a>）。</p>
-      </div>
-    </div>
+      <p class="mt-4 text-sm text-accent font-medium">讀 Part 2 →</p>
+    </a>
   </div>
 </section>
 
@@ -595,66 +126,9 @@
 </main>
 
 <script>
-  // mobile menu
   document.getElementById('menuBtn').addEventListener('click', function () {
     document.getElementById('mobileMenu').classList.toggle('hidden');
   });
-
-  // ---- Chart.js: clean results (brief Part 1 §6) ----
-  const scenarios = ['redirect_hot', 'redirect_cold', 'image_mixed'];
-  const series = [
-    { label: 'A. 同步 inline', color: '#9aa6b2' },
-    { label: 'B. 異步 worker', color: '#3fb950' },
-    { label: 'C. 完全移除', color: '#58a6ff' },
-  ];
-  const rps = {
-    'A. 同步 inline': [1620, 1121, 458],
-    'B. 異步 worker': [2227, 1301, 486],
-    'C. 完全移除': [2603, 1416, 458],
-  };
-  const p99 = {
-    'A. 同步 inline': [329, 202, 251],
-    'B. 異步 worker': [234, 152, 240],
-    'C. 完全移除': [190, 77, 263],
-  };
-  const gridColor = '#30363d';
-  const tickColor = '#9aa6b2';
-
-  function makeChart(canvasId, dataMap, axisLabel) {
-    new Chart(document.getElementById(canvasId), {
-      type: 'bar',
-      data: {
-        labels: scenarios,
-        datasets: series.map(function (s) {
-          return {
-            label: s.label,
-            data: dataMap[s.label],
-            backgroundColor: s.color,
-            borderRadius: 3,
-          };
-        }),
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          legend: { labels: { color: '#e6edf3' } },
-          tooltip: { mode: 'index', intersect: false },
-        },
-        scales: {
-          x: { grid: { color: gridColor }, ticks: { color: tickColor } },
-          y: {
-            beginAtZero: true,
-            grid: { color: gridColor },
-            ticks: { color: tickColor },
-            title: { display: true, text: axisLabel, color: tickColor },
-          },
-        },
-      },
-    });
-  }
-
-  makeChart('chartRps', rps, 'RPS');
-  makeChart('chartP99', p99, 'p99 (ms)');
 </script>
 </body>
 </html>

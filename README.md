@@ -9,9 +9,10 @@
 
 | 檔案 | 說明 |
 | --- | --- |
-| `index.html` | 全站單頁（Tailwind CDN + Chart.js CDN，無 build step） |
+| `index.html` | 首頁（hero + 關於我 + 兩篇文章入口，Tailwind CDN，無 build step） |
+| `part1.html` | Part 1 · 壓測實驗（含 Chart.js 圖表） |
+| `part2.html` | Part 2 · AI harness 心得 |
 | `.nojekyll` | 關閉 GitHub Pages 的 Jekyll 處理 |
-| `website-brief.md` / `website-brief-part2.md` | 內容來源規格（原始 brief，保留存查） |
 
 ## 本地預覽
 
